@@ -1,98 +1,117 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { StreakBadge } from '@/components/ui/StreakBadge';
+import { HeartBadge } from '@/components/ui/HeartBadge';
+import { DailyLessonCard } from '@/components/home/DailyLessonCard';
+import { SubjectProgressCard } from '@/components/home/SubjectProgressCard';
+import { WeeklyProgress } from '@/components/home/WeeklyProgress';
+import { Colors } from '@/constants/colors';
+import { useStore } from '@/store/useStore';
+import type { DayActivity } from '@/types';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
-
+/**
+ * Home screen — matches дизайн.html Screen 02 Home.
+ */
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const { user } = useStore();
+  const name = user?.full_name ?? 'Айдана';
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const weeklyData: DayActivity[] = [
+    { day: 'Дс', completed: true },
+    { day: 'Сс', completed: true },
+    { day: 'Ср', completed: true },
+    { day: 'Бс', completed: true },
+    { day: 'Жм', completed: true },
+    { day: 'Сн', completed: false },
+    { day: 'Жк', completed: false },
+  ];
+
+  const continueSubjects = [
+    { id: '1', name: 'Физика', topic: 'Электр өрісі', progress: 0.68, color: '#9B5DE5', soft: '#F0E5FA', icon: '⚛' },
+    { id: '2', name: 'Биология', topic: 'Жасуша құрылысы', progress: 0.42, color: '#52B788', soft: '#D8F3DC', icon: '🧬' },
+    { id: '3', name: 'Тарих', topic: 'Алтын Орда дәуірі', progress: 0.15, color: '#8D6E63', soft: '#EFE6E2', icon: '📜' },
+  ];
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Top bar */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.greeting}>Қайырлы күн,</Text>
+            <Text style={styles.name}>{name} 👋</Text>
+          </View>
+          <View style={styles.badges}>
+            <StreakBadge count={27} />
+            <HeartBadge count={4} />
+          </View>
+        </View>
+
+        {/* Daily Lesson Hero */}
+        <View style={styles.section}>
+          <DailyLessonCard
+            subjectName="Математика"
+            topicName={'Туынды және оның\nқолданылуы'}
+            progress={0.35}
+            questionsCount={12}
+            estimatedMinutes={8}
+            onPress={() => router.push('/topic/t3')}
+          />
+        </View>
+
+        {/* Weekly Streak */}
+        <View style={styles.section}>
+          <WeeklyProgress days={weeklyData} />
+        </View>
+
+        {/* Continue subjects */}
+        <Text style={styles.sectionLabel}>Жалғастыр</Text>
+        {continueSubjects.map((c) => (
+          <View key={c.id} style={styles.continueItem}>
+            <SubjectProgressCard
+              name={c.name}
+              icon={c.icon}
+              color={c.color}
+              softColor={c.soft}
+              topicName={c.topic}
+              progress={c.progress}
+              onPress={() => router.push(`/subject/${c.id}`)}
+            />
+          </View>
+        ))}
+
+        <View style={{ height: 100 }} />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  safe: { flex: 1, backgroundColor: Colors.bg },
+  scroll: { flex: 1, paddingHorizontal: 20 },
+  header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    paddingTop: 8,
+    paddingBottom: 14,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  headerLeft: {},
+  greeting: { fontSize: 13, color: Colors.ink3, fontWeight: '700' },
+  name: { fontSize: 20, fontWeight: '800', color: Colors.ink, letterSpacing: -0.3 },
+  badges: { flexDirection: 'row', gap: 8 },
+  section: { marginBottom: 16 },
+  sectionLabel: {
+    fontSize: 13,
+    color: Colors.ink3,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginTop: 8,
+    marginBottom: 12,
+    marginLeft: 4,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+  continueItem: { marginBottom: 10 },
 });
