@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { getAIExplanation } from '@/lib/ai';
 import { calculateQuizXP } from '@/lib/scoring';
 import { useStore } from '@/store/useStore';
+import { Config } from '@/constants/config';
 import type { Question, OptionLetter, QuizState, QuizAnswer } from '@/types';
 
 const MOCK_QUESTIONS: Question[] = [
@@ -70,7 +71,7 @@ export function useQuiz(topicId: string) {
       isAnswered: true,
       isCorrect: correct,
       score: correct ? prev.score + 1 : prev.score,
-      xpEarned: correct ? prev.xpEarned + 10 : prev.xpEarned,
+      xpEarned: correct ? prev.xpEarned + Config.XP_CORRECT_ANSWER : prev.xpEarned,
     }));
 
     if (!correct) {
@@ -79,11 +80,13 @@ export function useQuiz(topicId: string) {
       // Check cache first
       let explanation: string | null = null;
       if (user?.id) {
-        try {
-          const { data } = await supabase.from('user_answers').select('ai_explanation')
-            .eq('user_id', user.id).eq('question_id', q.id).not('ai_explanation', 'is', null).single();
-          if (data?.ai_explanation) explanation = data.ai_explanation;
-        } catch (_) { /* no cache */ }
+        const { data, error } = await supabase.from('user_answers').select('ai_explanation')
+          .eq('user_id', user.id).eq('question_id', q.id).not('ai_explanation', 'is', null)
+          .maybeSingle();
+        if (error && error.code !== 'PGRST116') {
+          console.warn('AI explanation cache lookup failed:', error);
+        }
+        if (data?.ai_explanation) explanation = data.ai_explanation;
       }
 
       if (!explanation) {
@@ -97,24 +100,22 @@ export function useQuiz(topicId: string) {
 
       // Save answer + cache explanation
       if (user?.id) {
-        try {
-          await supabase.from('user_answers').insert({
-            user_id: user.id, question_id: q.id,
-            selected_option: option, is_correct: false, ai_explanation: explanation,
-            answered_at: new Date().toISOString(),
-          });
-        } catch (_) { /* ok */ }
+        const { error: insertError } = await supabase.from('user_answers').insert({
+          user_id: user.id, question_id: q.id,
+          selected_option: option, is_correct: false, ai_explanation: explanation,
+          answered_at: new Date().toISOString(),
+        });
+        if (insertError) console.warn('Failed to save answer:', insertError);
       }
     } else {
-      addXP(10);
+      addXP(Config.XP_CORRECT_ANSWER);
       if (user?.id) {
-        try {
-          await supabase.from('user_answers').insert({
-            user_id: user.id, question_id: q.id,
-            selected_option: option, is_correct: true, ai_explanation: null,
-            answered_at: new Date().toISOString(),
-          });
-        } catch (_) { /* ok */ }
+        const { error: insertError } = await supabase.from('user_answers').insert({
+          user_id: user.id, question_id: q.id,
+          selected_option: option, is_correct: true, ai_explanation: null,
+          answered_at: new Date().toISOString(),
+        });
+        if (insertError) console.warn('Failed to save answer:', insertError);
       }
     }
 

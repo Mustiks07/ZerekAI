@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -13,13 +13,18 @@ import { Button } from '@/components/ui/Button';
 import { Colors } from '@/constants/colors';
 import { Config } from '@/constants/config';
 import { useQuiz } from '@/hooks/useQuiz';
+import { useStreak } from '@/hooks/useStreak';
+import { useProgress } from '@/hooks/useProgress';
 import type { OptionLetter } from '@/types';
 
 export default function QuizScreen() {
   const { topicId } = useLocalSearchParams<{ topicId: string }>();
   const quiz = useQuiz(topicId ?? 't1');
+  const { updateStreak } = useStreak();
+  const { updateProgress } = useProgress();
   const [showXPPopup, setShowXPPopup] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
+  const hasFinishedRef = useRef(false);
 
   // Animations
   const cardOpacity = useSharedValue(1);
@@ -67,6 +72,16 @@ export default function QuizScreen() {
   };
 
   const navigateToResult = () => {
+    if (hasFinishedRef.current) return;
+    hasFinishedRef.current = true;
+
+    if (topicId) {
+      updateProgress(topicId, quiz.score).catch((e) =>
+        console.warn('Progress update failed:', e)
+      );
+    }
+    updateStreak().catch((e) => console.warn('Streak update failed:', e));
+
     router.replace({
       pathname: '/result/[quizId]',
       params: {
@@ -92,9 +107,9 @@ export default function QuizScreen() {
   };
 
   const handleTimeUp = () => {
-    Alert.alert('⏱️ Уақыт бітті!', 'Тест уақыты аяқталды.', [
-      { text: 'Нәтижеге өту', onPress: navigateToResult },
-    ]);
+    if (hasFinishedRef.current) return;
+    Alert.alert('⏱️ Уақыт бітті!', 'Тест уақыты аяқталды.');
+    navigateToResult();
   };
 
   const handleQuit = () => {
