@@ -23,8 +23,10 @@ export default function RegisterScreen() {
     try {
       await signUp(email, password, { full_name: fullName, city, school, grade: parseInt(grade, 10) });
       router.replace('/(auth)/onboarding');
-    } catch (error) {
-      Alert.alert('Қате', 'Тіркелу сәтсіз аяқталды.');
+    } catch (error: any) {
+      console.error('Sign up error:', error);
+      const message = error?.message ?? 'Тіркелу сәтсіз аяқталды.';
+      Alert.alert('Қате', message);
     }
   };
 

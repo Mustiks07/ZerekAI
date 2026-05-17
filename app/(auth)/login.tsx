@@ -19,8 +19,10 @@ export default function LoginScreen() {
     try {
       await signIn(email, password);
       router.replace('/(tabs)');
-    } catch (error) {
-      Alert.alert('Қате', 'Кіру сәтсіз аяқталды. Деректеріңізді тексеріңіз.');
+    } catch (error: any) {
+      console.error('Sign in error:', error);
+      const message = error?.message ?? 'Кіру сәтсіз аяқталды. Деректеріңізді тексеріңіз.';
+      Alert.alert('Қате', message);
     }
   };
 
