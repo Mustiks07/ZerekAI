@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { TopicRow } from '@/components/subject/TopicRow';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { FlameIcon } from '@/components/ui/FlameIcon';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Colors } from '@/constants/colors';
-import { useProgress, MOCK_SUBJECTS, MOCK_TOPICS } from '@/hooks/useProgress';
-import type { Topic } from '@/types';
+import { useProgress, MOCK_SUBJECTS } from '@/hooks/useProgress';
+import { useStreak } from '@/hooks/useStreak';
+import { useStore } from '@/store/useStore';
+import { supabase } from '@/lib/supabase';
+import type { Topic, UserProgress } from '@/types';
 
 /**
  * Subject detail screen — green header with rounded bottom corners,
@@ -17,93 +21,141 @@ import type { Topic } from '@/types';
 export default function SubjectDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { loadTopics } = useProgress();
-  const [topics, setTopics] = useState<Topic[]>([]);
+  const { currentStreak } = useStreak();
+  const { user, subjects } = useStore();
 
-  const subject = MOCK_SUBJECTS.find(s => s.id === id);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [progressMap, setProgressMap] = useState<Map<string, UserProgress>>(new Map());
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Find subject from store first, then fall back to MOCK_SUBJECTS
+  const subject = subjects.find(s => s.id === id) ?? MOCK_SUBJECTS.find(s => s.id === id);
 
   useEffect(() => {
-    if (id) loadTopics(id).then(setTopics);
-  }, [id]);
+    if (!id) return;
 
-  const completedCount = 2; // mock
+    async function loadData() {
+      try {
+        const loadedTopics = await loadTopics(id as string);
+        setTopics(loadedTopics);
+
+        if (user?.id && loadedTopics.length > 0) {
+          const { data: progressData } = await supabase
+            .from('user_progress')
+            .select('*')
+            .eq('user_id', user.id)
+            .in('topic_id', loadedTopics.map(t => t.id));
+
+          const map = new Map<string, UserProgress>();
+          (progressData ?? []).forEach(p => map.set(p.topic_id, p as UserProgress));
+          setProgressMap(map);
+        }
+      } catch (e) {
+        Alert.alert('Қате', 'Деректерді жүктеу кезінде қате болды');
+        console.error(e);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadData();
+  }, [id, user?.id]);
+
+  const completedCount = topics.filter(t => progressMap.get(t.id)?.is_completed === true).length;
   const progress = topics.length > 0 ? completedCount / topics.length : 0;
   const pct = Math.round(progress * 100);
 
-  // Group topics into sections (mock)
-  const sections = [
-    {
-      title: '1-Бөлім · Алгебра',
-      done: completedCount >= 3,
-      topics: topics.slice(0, 3),
-    },
-    {
-      title: '2-Бөлім · Математикалық талдау',
-      done: false,
-      topics: topics.slice(3),
-    },
-  ].filter(s => s.topics.length > 0);
-
-  const getTopicStatus = (index: number): 'completed' | 'current' | 'locked' => {
-    if (index < completedCount) return 'completed';
-    if (index === completedCount) return 'current';
+  const getTopicStatus = (topicId: string, index: number): 'completed' | 'current' | 'locked' => {
+    const prog = progressMap.get(topicId);
+    if (prog?.is_completed) return 'completed';
+    if (prog && prog.best_score > 0) return 'current';
+    // First unstarted topic after all completed ones gets 'current'
+    const firstUnstartedIndex = topics.findIndex(t => {
+      const p = progressMap.get(t.id);
+      return !p?.is_completed;
+    });
+    if (index === firstUnstartedIndex) return 'current';
     return 'locked';
   };
+
+  const getTopicProgress = (topicId: string): number => {
+    const prog = progressMap.get(topicId);
+    if (!prog) return 0;
+    return Math.min(prog.best_score / 10, 1);
+  };
+
+  const sections = topics.length > 0
+    ? [{ title: '1-Бөлім', done: completedCount === topics.length && topics.length > 0, topics }]
+    : [];
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={styles.safe} edges={['bottom']}>
-        <FlatList
-          data={sections}
-          keyExtractor={(_, i) => String(i)}
-          contentContainerStyle={styles.list}
-          ListHeaderComponent={
+        {isLoading ? (
+          <View style={styles.loadingWrapper}>
             <View style={styles.header}>
-              {/* Top row */}
               <View style={styles.headerTop}>
-                <View style={styles.backBtn}>
+                <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(tabs)/subjects')}>
                   <Svg width={14} height={22} viewBox="0 0 14 22" fill="none">
                     <Path d="M12 2L2 11l10 9" stroke="#fff" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
                   </Svg>
-                </View>
+                </TouchableOpacity>
                 <Text style={styles.headerBack}>Пәндер</Text>
-                <View style={styles.headerStreak}>
-                  <FlameIcon size={14} />
-                  <Text style={styles.headerStreakText}> 27</Text>
-                </View>
               </View>
-
-              {/* Subject info */}
-              <View style={styles.subjectInfo}>
-                <View style={styles.subjectIcon}>
-                  <Text style={styles.subjectIconText}>{subject?.icon ?? '∑'}</Text>
-                </View>
-                <View style={styles.subjectMeta}>
-                  <Text style={styles.subjectLabel}>Профильдік пән</Text>
-                  <Text style={styles.subjectName}>{subject?.name_kz ?? 'Математика'}</Text>
-                </View>
-              </View>
-
-              {/* Progress */}
-              <View style={styles.progressRow}>
-                <View style={styles.progressBar}>
-                  <ProgressBar
-                    progress={progress}
-                    color={Colors.accent}
-                    backgroundColor="rgba(255,255,255,0.18)"
-                    height={10}
-                  />
-                </View>
-                <Text style={styles.progressText}>{pct}%</Text>
-              </View>
-              <Text style={styles.statsText}>
-                {completedCount} / {topics.length} тақырып · 247 сұрақ шешілді
-              </Text>
             </View>
-          }
-          renderItem={({ item: sec, index: si }) => {
-            const globalOffset = sections.slice(0, si).reduce((a, s) => a + s.topics.length, 0);
-            return (
+            <LoadingSpinner fullScreen message="Тақырыптар жүктелуде..." />
+          </View>
+        ) : (
+          <FlatList
+            data={sections}
+            keyExtractor={(_, i) => String(i)}
+            contentContainerStyle={styles.list}
+            ListHeaderComponent={
+              <View style={styles.header}>
+                {/* Top row */}
+                <View style={styles.headerTop}>
+                  <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(tabs)/subjects')}>
+                    <Svg width={14} height={22} viewBox="0 0 14 22" fill="none">
+                      <Path d="M12 2L2 11l10 9" stroke="#fff" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
+                  </TouchableOpacity>
+                  <Text style={styles.headerBack}>Пәндер</Text>
+                  <View style={styles.headerStreak}>
+                    <FlameIcon size={14} />
+                    <Text style={styles.headerStreakText}> {currentStreak}</Text>
+                  </View>
+                </View>
+
+                {/* Subject info */}
+                <View style={styles.subjectInfo}>
+                  <View style={styles.subjectIcon}>
+                    <Text style={styles.subjectIconText}>{subject?.icon ?? '∑'}</Text>
+                  </View>
+                  <View style={styles.subjectMeta}>
+                    <Text style={styles.subjectLabel}>Профильдік пән</Text>
+                    <Text style={styles.subjectName}>{subject?.name_kz ?? 'Пән'}</Text>
+                  </View>
+                </View>
+
+                {/* Progress */}
+                <View style={styles.progressRow}>
+                  <View style={styles.progressBar}>
+                    <ProgressBar
+                      progress={progress}
+                      color={Colors.accent}
+                      backgroundColor="rgba(255,255,255,0.18)"
+                      height={10}
+                    />
+                  </View>
+                  <Text style={styles.progressText}>{pct}%</Text>
+                </View>
+                <Text style={styles.statsText}>
+                  {completedCount} / {topics.length} тақырып аяқталды
+                </Text>
+              </View>
+            }
+            renderItem={({ item: sec }) => (
               <View style={styles.sectionContainer}>
                 {/* Section header */}
                 <View style={styles.sectionHeader}>
@@ -121,18 +173,23 @@ export default function SubjectDetailScreen() {
                   <View key={t.id} style={styles.topicItem}>
                     <TopicRow
                       name={t.name_kz}
-                      status={getTopicStatus(globalOffset + ti)}
-                      stars={getTopicStatus(globalOffset + ti) === 'completed' ? 3 : 0}
-                      progress={getTopicStatus(globalOffset + ti) === 'current' ? 0.6 : 0}
+                      status={getTopicStatus(t.id, ti)}
+                      stars={progressMap.get(t.id)?.is_completed ? 3 : 0}
+                      progress={getTopicProgress(t.id)}
                       onPress={() => router.push(`/topic/${t.id}`)}
                     />
                   </View>
                 ))}
               </View>
-            );
-          }}
-          ListFooterComponent={<View style={{ height: 100 }} />}
-        />
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>Тақырыптар табылмады</Text>
+              </View>
+            }
+            ListFooterComponent={<View style={{ height: 100 }} />}
+          />
+        )}
       </SafeAreaView>
     </>
   );
@@ -141,6 +198,7 @@ export default function SubjectDetailScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bg },
   list: { paddingBottom: 20 },
+  loadingWrapper: { flex: 1 },
   header: {
     backgroundColor: Colors.primary,
     paddingTop: 54,
@@ -261,5 +319,15 @@ const styles = StyleSheet.create({
   },
   topicItem: {
     marginBottom: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.ink3,
+    textAlign: 'center',
   },
 });

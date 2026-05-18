@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Button } from '@/components/ui/Button';
 import { SubjectCard } from '@/components/subject/SubjectCard';
 import { ZerekMascot } from '@/components/ui/ZerekMascot';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Colors } from '@/constants/colors';
-import { MOCK_SUBJECTS } from '@/hooks/useProgress';
+import { useProgress, MOCK_SUBJECTS } from '@/hooks/useProgress';
+import { supabase } from '@/lib/supabase';
 import { useStore } from '@/store/useStore';
+import type { Subject } from '@/types';
 
 /**
  * Onboarding — subject selection screen with progress dots, mascot, 3×3 grid.
@@ -15,7 +18,17 @@ import { useStore } from '@/store/useStore';
  */
 export default function OnboardingScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const { setOnboarded } = useStore();
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { loadSubjects } = useProgress();
+  const { user, setUser, setOnboarded } = useStore();
+
+  useEffect(() => {
+    loadSubjects().then(data => {
+      setSubjects(data);
+      setIsLoading(false);
+    });
+  }, []);
 
   const toggleSubject = (id: string) => {
     setSelectedIds(prev =>
@@ -23,14 +36,34 @@ export default function OnboardingScreen() {
     );
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (selectedIds.length < 2) {
       Alert.alert('Қате', 'Кем дегенде 2 пән таңдаңыз');
       return;
     }
+    try {
+      if (user?.id) {
+        await supabase
+          .from('user_profiles')
+          .update({ selected_subjects: selectedIds })
+          .eq('id', user.id);
+        setUser({ ...user, selected_subjects: selectedIds });
+      }
+    } catch (e) {
+      Alert.alert('Қате', 'Сақтау кезінде қате болды');
+      console.error(e);
+    }
     setOnboarded(true);
     router.replace('/(tabs)');
   };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <LoadingSpinner fullScreen message="Пәндер жүктелуде..." />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -64,7 +97,7 @@ export default function OnboardingScreen() {
 
         {/* Grid */}
         <View style={styles.grid}>
-          {MOCK_SUBJECTS.map(subject => (
+          {subjects.map(subject => (
             <View key={subject.id} style={styles.gridItem}>
               <SubjectCard
                 name={subject.name_kz}

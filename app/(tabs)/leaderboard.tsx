@@ -1,27 +1,18 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card } from '@/components/ui/Card';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Colors } from '@/constants/colors';
+import { supabase } from '@/lib/supabase';
 
-interface LeaderboardEntry {
-  rank: number;
-  name: string;
+interface LeaderboardRow {
+  full_name: string;
   school: string;
-  xp: number;
-  streak: number;
+  weekly_xp: number;
+  cur_streak: number;
+  is_me: boolean;
 }
-
-const MOCK_LEADERBOARD: LeaderboardEntry[] = [
-  { rank: 1, name: 'Айдана К.', school: '№42 мектеп', xp: 2450, streak: 14 },
-  { rank: 2, name: 'Ерасыл М.', school: 'НИШ Алматы', xp: 2280, streak: 12 },
-  { rank: 3, name: 'Дана С.', school: '№15 мектеп', xp: 2100, streak: 10 },
-  { rank: 4, name: 'Арман Б.', school: 'БИЛ Астана', xp: 1950, streak: 8 },
-  { rank: 5, name: 'Камила Т.', school: '№7 мектеп', xp: 1800, streak: 7 },
-  { rank: 6, name: 'Нұрсұлтан А.', school: '№28 мектеп', xp: 1650, streak: 5 },
-  { rank: 7, name: 'Сен', school: '', xp: 240, streak: 5 },
-  { rank: 8, name: 'Мадина О.', school: '№11 мектеп', xp: 220, streak: 3 },
-];
 
 function getMedalEmoji(rank: number): string {
   if (rank === 1) return '🥇';
@@ -30,7 +21,39 @@ function getMedalEmoji(rank: number): string {
   return `${rank}`;
 }
 
+/**
+ * Leaderboard screen — weekly top users from Supabase RPC.
+ * Matches дизайн.html Screen 06 Leaderboard.
+ */
 export default function LeaderboardScreen() {
+  const [rows, setRows] = useState<LeaderboardRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .rpc('get_weekly_leaderboard', { take_count: 20 })
+      .then(({ data, error }) => {
+        if (error) {
+          Alert.alert('Қате', 'Рейтинг жүктелмеді');
+          console.error('leaderboard rpc error:', error);
+        }
+        if (data && !error) setRows(data as LeaderboardRow[]);
+        setIsLoading(false);
+      });
+  }, []);
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Рейтинг 🏆</Text>
+          <Text style={styles.subtitle}>Апталық ең белсенді оқушылар</Text>
+        </View>
+        <LoadingSpinner fullScreen message="Жүктелуде..." />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
@@ -39,27 +62,34 @@ export default function LeaderboardScreen() {
       </View>
 
       <FlatList
-        data={MOCK_LEADERBOARD}
-        keyExtractor={(item) => String(item.rank)}
+        data={rows}
+        keyExtractor={(_, index) => String(index)}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => {
-          const isMe = item.name === 'Сен';
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🏁</Text>
+            <Text style={styles.emptyTitle}>Әлі ешкім жоқ</Text>
+            <Text style={styles.emptySubtitle}>Бірінші бол!</Text>
+          </View>
+        }
+        renderItem={({ item, index }) => {
+          const rank = index + 1;
           return (
-            <Card style={StyleSheet.flatten([styles.row, isMe ? styles.rowMe : undefined])}>
+            <Card style={StyleSheet.flatten([styles.row, item.is_me ? styles.rowMe : undefined])}>
               <View style={styles.rankContainer}>
-                <Text style={[styles.rank, item.rank <= 3 && styles.rankTop]}>
-                  {getMedalEmoji(item.rank)}
+                <Text style={[styles.rank, rank <= 3 && styles.rankTop]}>
+                  {getMedalEmoji(rank)}
                 </Text>
               </View>
               <View style={styles.info}>
-                <Text style={[styles.name, isMe && styles.nameMe]}>
-                  {item.name} {isMe ? '(сен)' : ''}
+                <Text style={[styles.name, item.is_me && styles.nameMe]}>
+                  {item.full_name}{item.is_me ? ' (сен)' : ''}
                 </Text>
                 {item.school ? <Text style={styles.school}>{item.school}</Text> : null}
               </View>
               <View style={styles.stats}>
-                <Text style={styles.xp}>⚡ {item.xp}</Text>
-                <Text style={styles.streak}>🔥 {item.streak}</Text>
+                <Text style={styles.xp}>⚡ {item.weekly_xp} XP</Text>
+                <Text style={styles.streak}>🔥 {item.cur_streak}</Text>
               </View>
             </Card>
           );
@@ -93,4 +123,12 @@ const styles = StyleSheet.create({
   stats: { alignItems: 'flex-end', gap: 2 },
   xp: { fontSize: 14, fontWeight: '700', color: Colors.accent },
   streak: { fontSize: 12, color: Colors.ink3 },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    gap: 8,
+  },
+  emptyEmoji: { fontSize: 48 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: Colors.ink },
+  emptySubtitle: { fontSize: 14, color: Colors.ink3 },
 });
