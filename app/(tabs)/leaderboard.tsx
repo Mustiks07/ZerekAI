@@ -1,27 +1,17 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card } from '@/components/ui/Card';
 import { Colors } from '@/constants/colors';
+import { supabase } from '@/lib/supabase';
 
-interface LeaderboardEntry {
-  rank: number;
-  name: string;
+interface LeaderboardRow {
+  full_name: string;
   school: string;
-  xp: number;
-  streak: number;
+  weekly_xp: number;
+  cur_streak: number;
+  is_me: boolean;
 }
-
-const MOCK_LEADERBOARD: LeaderboardEntry[] = [
-  { rank: 1, name: 'Айдана К.', school: '№42 мектеп', xp: 2450, streak: 14 },
-  { rank: 2, name: 'Ерасыл М.', school: 'НИШ Алматы', xp: 2280, streak: 12 },
-  { rank: 3, name: 'Дана С.', school: '№15 мектеп', xp: 2100, streak: 10 },
-  { rank: 4, name: 'Арман Б.', school: 'БИЛ Астана', xp: 1950, streak: 8 },
-  { rank: 5, name: 'Камила Т.', school: '№7 мектеп', xp: 1800, streak: 7 },
-  { rank: 6, name: 'Нұрсұлтан А.', school: '№28 мектеп', xp: 1650, streak: 5 },
-  { rank: 7, name: 'Сен', school: '', xp: 240, streak: 5 },
-  { rank: 8, name: 'Мадина О.', school: '№11 мектеп', xp: 220, streak: 3 },
-];
 
 function getMedalEmoji(rank: number): string {
   if (rank === 1) return '🥇';
@@ -31,6 +21,29 @@ function getMedalEmoji(rank: number): string {
 }
 
 export default function LeaderboardScreen() {
+  const [rows, setRows] = useState<LeaderboardRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadLeaderboard();
+  }, []);
+
+  const loadLeaderboard = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('get_weekly_leaderboard', { take_count: 20 });
+      if (rpcError) throw rpcError;
+      setRows((data as LeaderboardRow[]) ?? []);
+    } catch (e) {
+      console.warn('Leaderboard load failed:', e);
+      setError('Деректер жүктелмеді');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
@@ -38,33 +51,48 @@ export default function LeaderboardScreen() {
         <Text style={styles.subtitle}>Апталық ең белсенді оқушылар</Text>
       </View>
 
-      <FlatList
-        data={MOCK_LEADERBOARD}
-        keyExtractor={(item) => String(item.rank)}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => {
-          const isMe = item.name === 'Сен';
-          return (
-            <Card style={StyleSheet.flatten([styles.row, isMe ? styles.rowMe : undefined])}>
-              <View style={styles.rankContainer}>
-                <Text style={[styles.rank, item.rank <= 3 && styles.rankTop]}>
-                  {getMedalEmoji(item.rank)}
-                </Text>
-              </View>
-              <View style={styles.info}>
-                <Text style={[styles.name, isMe && styles.nameMe]}>
-                  {item.name} {isMe ? '(сен)' : ''}
-                </Text>
-                {item.school ? <Text style={styles.school}>{item.school}</Text> : null}
-              </View>
-              <View style={styles.stats}>
-                <Text style={styles.xp}>⚡ {item.xp}</Text>
-                <Text style={styles.streak}>🔥 {item.streak}</Text>
-              </View>
-            </Card>
-          );
-        }}
-      />
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={Colors.primary} size="large" />
+        </View>
+      ) : error ? (
+        <View style={styles.center}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : rows.length === 0 ? (
+        <View style={styles.center}>
+          <Text style={styles.emptyText}>Әзірге ешкім жоқ 😴</Text>
+          <Text style={styles.emptySubtext}>Бірінші болыңыз!</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={rows}
+          keyExtractor={(_, i) => String(i)}
+          contentContainerStyle={styles.list}
+          renderItem={({ item, index }) => {
+            const rank = index + 1;
+            return (
+              <Card style={StyleSheet.flatten([styles.row, item.is_me ? styles.rowMe : undefined])}>
+                <View style={styles.rankContainer}>
+                  <Text style={[styles.rank, rank <= 3 && styles.rankTop]}>
+                    {getMedalEmoji(rank)}
+                  </Text>
+                </View>
+                <View style={styles.info}>
+                  <Text style={[styles.name, item.is_me && styles.nameMe]}>
+                    {item.full_name} {item.is_me ? '(сен)' : ''}
+                  </Text>
+                  {item.school ? <Text style={styles.school}>{item.school}</Text> : null}
+                </View>
+                <View style={styles.stats}>
+                  <Text style={styles.xp}>⚡ {item.weekly_xp}</Text>
+                  <Text style={styles.streak}>🔥 {item.cur_streak}</Text>
+                </View>
+              </Card>
+            );
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -75,14 +103,12 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '800', color: Colors.ink },
   subtitle: { fontSize: 14, color: Colors.ink3, marginTop: 4 },
   list: { paddingHorizontal: 20, gap: 8, paddingBottom: 20 },
-  row: {
-    flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12,
-  },
-  rowMe: {
-    backgroundColor: Colors.primarySoft,
-    borderColor: Colors.primary,
-    borderWidth: 2,
-  },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  errorText: { fontSize: 15, color: Colors.ink2 },
+  emptyText: { fontSize: 18, fontWeight: '700', color: Colors.ink },
+  emptySubtext: { fontSize: 14, color: Colors.ink3 },
+  row: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
+  rowMe: { backgroundColor: Colors.primarySoft, borderColor: Colors.primary, borderWidth: 2 },
   rankContainer: { width: 36, alignItems: 'center' },
   rank: { fontSize: 18, fontWeight: '700', color: Colors.ink3 },
   rankTop: { fontSize: 22 },

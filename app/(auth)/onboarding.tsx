@@ -1,21 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Button } from '@/components/ui/Button';
 import { SubjectCard } from '@/components/subject/SubjectCard';
 import { ZerekMascot } from '@/components/ui/ZerekMascot';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Colors } from '@/constants/colors';
-import { MOCK_SUBJECTS } from '@/hooks/useProgress';
+import { useProgress, MOCK_SUBJECTS } from '@/hooks/useProgress';
 import { useStore } from '@/store/useStore';
+import { supabase } from '@/lib/supabase';
+import type { Subject } from '@/types';
 
-/**
- * Onboarding — subject selection screen with progress dots, mascot, 3×3 grid.
- * Matches дизайн.html Screen 01 Onboarding.
- */
 export default function OnboardingScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const { setOnboarded } = useStore();
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const { loadSubjects } = useProgress();
+  const { setOnboarded, user, setUser } = useStore();
+
+  useEffect(() => {
+    loadSubjects().then((data) => {
+      setSubjects(data.length > 0 ? data : MOCK_SUBJECTS);
+      setLoading(false);
+    });
+  }, []);
 
   const toggleSubject = (id: string) => {
     setSelectedIds(prev =>
@@ -23,19 +33,43 @@ export default function OnboardingScreen() {
     );
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (selectedIds.length < 2) {
       Alert.alert('Қате', 'Кем дегенде 2 пән таңдаңыз');
       return;
+    }
+    setSaving(true);
+    try {
+      if (user?.id) {
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({ selected_subjects: selectedIds })
+          .eq('id', user.id);
+        if (error) throw error;
+        if (setUser && user) {
+          setUser({ ...user, selected_subjects: selectedIds });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to save subjects:', e);
+    } finally {
+      setSaving(false);
     }
     setOnboarded(true);
     router.replace('/(tabs)');
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <LoadingSpinner />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Progress dots */}
         <View style={styles.progressDots}>
           <View style={[styles.dot, styles.dotActive]} />
           <View style={[styles.dot, styles.dotActive]} />
@@ -43,7 +77,6 @@ export default function OnboardingScreen() {
           <View style={styles.dot} />
         </View>
 
-        {/* Mascot + greeting */}
         <View style={styles.mascotRow}>
           <ZerekMascot size={64} />
           <View>
@@ -54,7 +87,6 @@ export default function OnboardingScreen() {
           </View>
         </View>
 
-        {/* Title */}
         <Text style={styles.title}>
           Қандай пәндерді{'\n'}дайындағың келеді?
         </Text>
@@ -62,9 +94,8 @@ export default function OnboardingScreen() {
           ҰБТ-ға арналған 3 пәнді таңда. Кейін өзгертуге болады.
         </Text>
 
-        {/* Grid */}
         <View style={styles.grid}>
-          {MOCK_SUBJECTS.map(subject => (
+          {subjects.map(subject => (
             <View key={subject.id} style={styles.gridItem}>
               <SubjectCard
                 name={subject.name_kz}
@@ -78,7 +109,6 @@ export default function OnboardingScreen() {
         </View>
       </ScrollView>
 
-      {/* Footer */}
       <View style={styles.footer}>
         <View style={styles.footerInfo}>
           <Text style={styles.selectedCount}>
@@ -97,9 +127,9 @@ export default function OnboardingScreen() {
           </View>
         </View>
         <Button
-          title="Жалғастыру →"
+          title={saving ? 'Сақталуда...' : 'Жалғастыру →'}
           onPress={handleContinue}
-          disabled={selectedIds.length < 2}
+          disabled={selectedIds.length < 2 || saving}
         />
       </View>
     </SafeAreaView>
@@ -109,99 +139,34 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bg },
   scroll: { padding: 24, paddingTop: 10, paddingBottom: 20 },
-  progressDots: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 28,
-  },
-  dot: {
-    flex: 1,
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: Colors.line,
-  },
-  dotActive: {
-    backgroundColor: Colors.primary,
-  },
-  mascotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginBottom: 8,
-  },
+  progressDots: { flexDirection: 'row', gap: 6, marginBottom: 28 },
+  dot: { flex: 1, height: 8, borderRadius: 999, backgroundColor: Colors.line },
+  dotActive: { backgroundColor: Colors.primary },
+  mascotRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 8 },
   stepBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.accentSoft,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    marginBottom: 6,
+    alignSelf: 'flex-start', backgroundColor: Colors.accentSoft,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, marginBottom: 6,
   },
   stepText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: Colors.accentDark,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontSize: 11, fontWeight: '800', color: Colors.accentDark,
+    textTransform: 'uppercase', letterSpacing: 0.5,
   },
-  mascotGreeting: {
-    fontSize: 14,
-    color: Colors.ink2,
-    fontWeight: '600',
-  },
+  mascotGreeting: { fontSize: 14, color: Colors.ink2, fontWeight: '600' },
   title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: Colors.ink,
-    lineHeight: 30,
-    letterSpacing: -0.4,
-    marginTop: 14,
-    marginBottom: 6,
+    fontSize: 26, fontWeight: '800', color: Colors.ink,
+    lineHeight: 30, letterSpacing: -0.4, marginTop: 14, marginBottom: 6,
   },
-  subtitle: {
-    fontSize: 14,
-    color: Colors.ink2,
-    lineHeight: 20,
-    marginBottom: 18,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  gridItem: {
-    width: '31%',
-    flexGrow: 1,
-  },
+  subtitle: { fontSize: 14, color: Colors.ink2, lineHeight: 20, marginBottom: 18 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  gridItem: { width: '31%', flexGrow: 1 },
   footer: {
-    paddingHorizontal: 24,
-    paddingTop: 18,
-    paddingBottom: 34,
-    backgroundColor: Colors.bg,
-    borderTopWidth: 0,
+    paddingHorizontal: 24, paddingTop: 18, paddingBottom: 34, backgroundColor: Colors.bg,
   },
   footerInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14,
   },
-  selectedCount: {
-    fontSize: 13,
-    color: Colors.ink2,
-    fontWeight: '700',
-  },
-  footerDots: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  footerDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.line,
-  },
-  footerDotActive: {
-    backgroundColor: Colors.primary,
-  },
+  selectedCount: { fontSize: 13, color: Colors.ink2, fontWeight: '700' },
+  footerDots: { flexDirection: 'row', gap: 4 },
+  footerDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.line },
+  footerDotActive: { backgroundColor: Colors.primary },
 });
