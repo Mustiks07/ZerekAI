@@ -15,6 +15,7 @@ export interface Topic {
   subject_id: string;
   name_kz: string;
   description_kz: string;
+  theory_text?: string;
   video_url: string | null;
   order: number;
   is_active: boolean;
@@ -26,14 +27,27 @@ export type OptionLetter = 'A' | 'B' | 'C' | 'D';
 export interface Question {
   id: string;
   topic_id: string;
+  subject_id?: string;
   question_kz: string;
   option_a: string;
   option_b: string;
   option_c: string;
   option_d: string;
   correct_option: OptionLetter;
+  explanation?: string;
   difficulty: Difficulty;
   is_active: boolean;
+}
+
+export interface QuizResult {
+  id: string;
+  user_id: string;
+  topic_id: string;
+  subject_id?: string;
+  score: number;
+  total_questions: number;
+  time_spent: number;
+  created_at: string;
 }
 
 export interface UserProfile {
