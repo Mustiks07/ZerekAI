@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Colors } from '@/constants/colors';
 import { MOCK_TOPICS } from '@/hooks/useProgress';
+import { getReadingTextsForTopic } from '@/hooks/useReading';
 import type { Topic } from '@/types';
 
 function findTopic(topicId: string): Topic | undefined {
@@ -19,6 +20,7 @@ function findTopic(topicId: string): Topic | undefined {
 export default function TopicDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const topic = findTopic(id ?? '');
+  const readingTexts = getReadingTextsForTopic(id ?? '');
 
   return (
     <>
@@ -72,6 +74,25 @@ export default function TopicDetailScreen() {
             </View>
           </Card>
 
+          {readingTexts.length > 0 && (
+            <Card style={styles.readingCard}>
+              <Text style={styles.readingTitle}>📖 Мәтін оқу</Text>
+              <Text style={styles.readingDesc}>
+                Мәтінді оқып, сұрақтарға жауап беріңіз — бұл ҰБТ-да жиі кездеседі.
+              </Text>
+              {readingTexts.map((rt) => (
+                <Button
+                  key={rt.id}
+                  title={rt.title_kz}
+                  variant="secondary"
+                  small
+                  onPress={() => router.push(`/reading/${rt.id}`)}
+                  style={styles.readingBtn}
+                />
+              ))}
+            </Card>
+          )}
+
           <Button
             title="Тест бастау 🚀"
             onPress={() => router.push(`/quiz/${id}`)}
@@ -94,6 +115,10 @@ const styles = StyleSheet.create({
   keyPoints: { marginTop: 12, gap: 4 },
   keyPointsTitle: { fontSize: 14, fontWeight: '600', color: Colors.ink, marginBottom: 4 },
   keyPoint: { fontSize: 14, color: Colors.ink2 },
+  readingCard: { padding: 18, gap: 8, backgroundColor: Colors.primarySoft, borderColor: Colors.primary },
+  readingTitle: { fontSize: 16, fontWeight: '800', color: Colors.primary },
+  readingDesc: { fontSize: 13, color: Colors.ink2, lineHeight: 20 },
+  readingBtn: { marginTop: 4 },
   videoCard: { padding: 20, backgroundColor: Colors.accentSoft, borderColor: Colors.accent },
   videoTitle: { fontSize: 15, fontWeight: '600', color: Colors.ink },
   videoText: { fontSize: 13, color: Colors.ink3, marginTop: 4 },

@@ -44,6 +44,7 @@ export default function RootLayout() {
         <Stack.Screen name="result/[quizId]" options={{ gestureEnabled: false, animation: 'fade' }} />
         <Stack.Screen name="ubt-session/index" options={{ gestureEnabled: false }} />
         <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="reading/[textId]" options={{ headerShown: true, headerTitle: 'Мәтін оқу', headerBackTitle: 'Артқа', headerTintColor: Colors.primary, headerStyle: { backgroundColor: Colors.bg } }} />
       </Stack>
     </GestureHandlerRootView>
   );

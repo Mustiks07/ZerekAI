@@ -147,3 +147,24 @@ export interface QuizParams {
 export interface ResultParams {
   quizId: string;
 }
+
+// ─── Native Text Reading ────────────────────────────────────────────
+
+export interface ReadingText {
+  id: string;
+  topic_id: string;
+  title_kz: string;
+  body_kz: string;
+  author_kz?: string;
+}
+
+export interface ReadingQuestion {
+  id: string;
+  text_id: string;
+  question_kz: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  correct_option: OptionLetter;
+}
